@@ -428,6 +428,9 @@ export default Alchemy.Stack(
 
     const app = yield* Cloudflare.Worker("open-seo", {
       name: workerName(stage),
+      // More Clicks uses only its custom hostname. Alchemy also disables
+      // workers.dev preview URLs when url is false.
+      ...(stage === "selfhost" ? { url: false } : {}),
       // Prod serves the real domains; the zone is inferred from the hostname.
       domain: prod ? ["app.openseo.so", "www.app.openseo.so"] : customDomain,
       // Prebuilt worker from `vite build` (@cloudflare/vite-plugin). The entry
