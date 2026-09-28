@@ -291,6 +291,7 @@ export interface QueuedCheckStats {
 export async function runQueuedCheck(
   step: WorkflowStep,
   ctx: CheckContext,
+  options: { allowLiveFallback: boolean } = { allowLiveFallback: true },
 ): Promise<QueuedCheckStats> {
   const taskInputs = expandToTaskInputs(ctx.keywords, ctx.devices);
 
@@ -385,8 +386,22 @@ export async function runQueuedCheck(
   // Progress isn't updated here; finalize recounts keywordsChecked from the
   // DB.
   const stragglers: RankCheckTaskInput[] = [...fallback, ...pending];
-  stats.fallbackTasks = stragglers.length;
   if (stragglers.length === 0) return stats;
+
+  if (!options.allowLiveFallback) {
+    await pgStep(
+      step,
+      "record-queue-incomplete",
+      SINGLE_ATTEMPT_STEP_CONFIG,
+      () =>
+        RankTrackingRepository.setRunErrorIfEmpty(
+          ctx.runId,
+          `${stragglers.length} queued task(s) failed or timed out; instant fallback is disabled.`,
+        ),
+    );
+    return stats;
+  }
+  stats.fallbackTasks = stragglers.length;
 
   console.log(
     `[rank-check] ${ctx.runId} live fallback for ${stragglers.length} task(s)`,
