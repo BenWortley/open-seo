@@ -105,9 +105,34 @@ describe("queued-only scheduled checks", () => {
         "run-1",
         expect.stringContaining("instant fallback is disabled"),
       );
-      expect(f.sleep).toHaveBeenCalledTimes(status === "pending" ? 6 : 1);
+      expect(f.sleep).toHaveBeenCalledTimes(status === "pending" ? 10 : 1);
     },
   );
+
+  it("collects a slow queued result after the original polling window without resubmitting", async () => {
+    const f = fixture();
+    for (let i = 0; i < 6; i++) {
+      mocks.fetchResult.mockResolvedValueOnce({ status: "pending" });
+    }
+    mocks.fetchResult.mockResolvedValueOnce({
+      status: "completed",
+      result: {
+        keywordId: task.keywordId,
+        keyword: task.keyword,
+        position: 3,
+        url: "https://example.com/",
+        serpFeatures: [],
+      },
+    });
+    const stats = await runQueuedCheck(f.step, f.ctx, {
+      allowLiveFallback: false,
+    });
+    expect(stats.queueCollected).toBe(1);
+    expect(f.rankCheckTaskPost).toHaveBeenCalledTimes(1);
+    expect(f.rankCheck).not.toHaveBeenCalled();
+    expect(f.sleep).toHaveBeenLastCalledWith("wait-6", "5 minutes");
+    expect(mocks.setRunErrorIfEmpty).not.toHaveBeenCalled();
+  });
 
   it("does not spend on instant calls after a rejected task submission", async () => {
     const f = fixture();

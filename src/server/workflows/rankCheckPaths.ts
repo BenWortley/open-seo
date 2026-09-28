@@ -176,6 +176,16 @@ const QUEUED_POLL_INTERVALS = [
   "3 minutes",
 ] as const;
 
+// Weekly queued-only checks can wait for provider backlog without paying for
+// instant fallback. Keep upstream's shorter window when fallback is enabled.
+const QUEUED_ONLY_POLL_INTERVALS = [
+  ...QUEUED_POLL_INTERVALS,
+  "5 minutes",
+  "10 minutes",
+  "15 minutes",
+  "15 minutes",
+] as const;
+
 /** Concurrent task_get requests within a collect step. */
 const TASK_GET_CONCURRENCY = 25;
 
@@ -346,16 +356,20 @@ export async function runQueuedCheck(
     fallbackChecked: 0,
   };
 
-  // Poll until everything is collected or the ~15 minute window closes. A
+  const pollIntervals = options.allowLiveFallback
+    ? QUEUED_POLL_INTERVALS
+    : QUEUED_ONLY_POLL_INTERVALS;
+
+  // Poll for ~15 minutes with fallback, or ~60 minutes for queued-only runs. A
   // collect failure (past its retries) leaves that round's tasks pending for
   // the next round — or the live fallback — instead of failing the run; the
   // posted tasks are already paid for.
   for (
     let round = 0;
-    round < QUEUED_POLL_INTERVALS.length && pending.length > 0;
+    round < pollIntervals.length && pending.length > 0;
     round++
   ) {
-    await step.sleep(`wait-${round}`, QUEUED_POLL_INTERVALS[round]);
+    await step.sleep(`wait-${round}`, pollIntervals[round]);
 
     // Cap task_gets per round so one collect step stays well inside the
     // per-invocation subrequest limit at the 1000-keyword config ceiling.

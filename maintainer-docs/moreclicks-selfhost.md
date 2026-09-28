@@ -4,7 +4,7 @@ The `moreclicks-selfhost` branch carries More Clicks customizations; `main` foll
 
 ## Scheduled ranking checks
 
-Scheduled checks call `runQueuedCheck` with `allowLiveFallback: false`. Provider failures, rejected submissions and queued tasks still pending after the polling window are reported as incomplete; completed results remain saved. They never automatically incur an additional instant check. Manual checks still use the instant API and incur its higher price.
+Scheduled checks call `runQueuedCheck` with `allowLiveFallback: false`. Queued-only runs poll for up to roughly one hour (plus request time), since provider backlog exceeded the upstream 15-minute window during verification. Result collection is free and never resubmits paid tasks. Provider failures, rejected submissions and queued tasks still pending after the polling window are reported as incomplete; completed results remain saved. They never automatically incur an additional instant check. Manual checks still use the instant API and incur its higher price.
 
 This is a small fork-specific change in `RankCheckWorkflow.ts` plus a backwards-compatible option in `rankCheckPaths.ts`. Preserve it when merging upstream. The regression tests cover successful collection, provider failure, queue timeout and failed submission without live API calls.
 
