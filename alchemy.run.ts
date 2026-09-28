@@ -440,12 +440,14 @@ export default Alchemy.Stack(
       // Site audits moved to the open-seo-audit worker, but RankCheckWorkflow
       // still parses SERP batches here — keep the CPU allowance until that
       // workflow's per-tick CPU is measured or it moves too. Configurable CPU
-      // limits are a paid-plan feature, and self-host deploys
-      // (cloudflare_access) may run on the free plan — which rejects them —
-      // so those get the plan default instead.
-      ...(authMode === "cloudflare_access"
-        ? {}
-        : { limits: { cpuMs: 300_000 } }),
+      // More Clicks selfhost uses Workers Paid. Set its limits explicitly so
+      // rank-check workflows do not retain the pre-upgrade Free allowance.
+      // Other Cloudflare Access stages may still run on the Free plan.
+      ...(stage === "selfhost"
+        ? { limits: { cpuMs: 30_000, subrequests: 10_000 } }
+        : authMode === "cloudflare_access"
+          ? {}
+          : { limits: { cpuMs: 300_000 } }),
       observability: {
         enabled: wrangler.observability?.enabled ?? true,
         traces: { enabled: wrangler.observability?.traces?.enabled ?? false },

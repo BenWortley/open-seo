@@ -13,3 +13,7 @@ This is a small fork-specific change in `RankCheckWorkflow.ts` plus a backwards-
 Use the upstream Cloudflare Access protection and restrict allowed users. Keep runtime credentials outside Git. The DataForSEO recovery reference is the More Clicks vault item “More Clicks — DataForSEO API”; never copy values into this document or CI logs.
 
 Current deployment status and project migration evidence belong in the separate MoreClicksInfra workspace, not this public repository.
+
+## Workers plan
+
+The More Clicks `selfhost` stage requires Workers Paid. Its app Worker explicitly sets 30 seconds CPU and 10,000 subrequests per invocation in `alchemy.run.ts`; other preview stages retain upstream defaults. Preserve this setting when merging upstream.
