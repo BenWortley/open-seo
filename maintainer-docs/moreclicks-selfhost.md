@@ -17,3 +17,9 @@ Current deployment status and project migration evidence belong in the separate 
 ## Workers plan
 
 The More Clicks `selfhost` stage requires Workers Paid. Its app Worker explicitly sets 30 seconds CPU and 10,000 subrequests per invocation in `alchemy.run.ts`; other preview stages retain upstream defaults. Preserve this setting when merging upstream.
+
+## Custom hostname
+
+The `selfhost` stage serves `seo.moreclicks.co.uk`. Alchemy attaches the custom domain to the existing app Worker and includes it as a second destination on the existing Access application. The workers.dev address stays protected by the same allow-policy and audience. Preserve both destinations when merging upstream; attaching a Worker domain alone does not configure Access.
+
+Managed OAuth is configured through the Access API because this Alchemy version does not expose it. Verify it survives Access reconciliation, alongside the allowed identity and signed-out denial on both hostnames. MCP clients use `https://seo.moreclicks.co.uk/mcp` and authenticate through Cloudflare Access. No data migration is needed for a hostname change.
