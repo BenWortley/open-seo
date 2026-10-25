@@ -305,7 +305,8 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const stage = yield* Alchemy.Stage;
     const prod = stage === HOSTED_PROD_STAGE;
-    const customDomain = stage === "selfhost" ? "seo.moreclicks.co.uk" : undefined;
+    const customDomain =
+      stage === "selfhost" ? "seo.moreclicks.co.uk" : undefined;
     // Fail closed: an unset AUTH_MODE gets the Access-gated mode (matching the
     // app's own default in src/lib/auth-mode.ts), never public hosted signup.
     // hosted/local_noauth must be set explicitly.
