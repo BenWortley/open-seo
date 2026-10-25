@@ -21,6 +21,7 @@ import { DB_BATCH_SIZE, executeInBatches } from "@/db/runBatch";
 import type { RankTrackingSkipReason } from "@/shared/rank-tracking";
 import {
   getLatestSnapshotsForKeywords,
+  getBestPositionsForKeywords,
   getSnapshotsBeforeDate,
   getEarliestSnapshotsForKeywords,
   getKeywordHistory,
@@ -35,6 +36,8 @@ import {
   getLatestRunForConfig,
   getActiveRunForConfig,
   insertSnapshots,
+  upsertSnapshots,
+  deleteNotFoundSnapshots,
   getSnapshotsForRun,
 } from "./runQueries";
 
@@ -75,10 +78,11 @@ async function getConfigById({
   return rows[0] ?? null;
 }
 
-async function getConfigByProjectDomainLocation(
+async function getConfigByProjectDomainMarket(
   projectId: string,
   domain: string,
   locationCode: number,
+  languageCode: string,
   locationName: string | null,
 ) {
   const rows = await db
@@ -89,6 +93,7 @@ async function getConfigByProjectDomainLocation(
         eq(rankTrackingConfigs.projectId, projectId),
         eq(rankTrackingConfigs.domain, domain),
         eq(rankTrackingConfigs.locationCode, locationCode),
+        eq(rankTrackingConfigs.languageCode, languageCode),
         // National (NULL) and per-city configs are distinct rows — mirrors
         // the partial unique indexes, so a national config and any number of
         // city configs can coexist for the same domain.
@@ -265,6 +270,33 @@ async function removeKeywordsFromConfig(
   return removedIds;
 }
 
+async function setKeywordsPinned(
+  keywordIds: string[],
+  configId: string,
+  pinned: boolean,
+) {
+  const pinnedAt = pinned ? new Date().toISOString() : null;
+  const updatedIds: string[] = [];
+  // Same IN-list ceiling as removeKeywordsFromConfig, plus two binds for
+  // configId and pinnedAt.
+  const updateBatchSize = 90;
+  for (let i = 0; i < keywordIds.length; i += updateBatchSize) {
+    const chunk = keywordIds.slice(i, i + updateBatchSize);
+    const updated = await db
+      .update(rankTrackingKeywords)
+      .set({ pinnedAt })
+      .where(
+        and(
+          inArray(rankTrackingKeywords.id, chunk),
+          eq(rankTrackingKeywords.configId, configId),
+        ),
+      )
+      .returning({ id: rankTrackingKeywords.id });
+    updatedIds.push(...updated.map((row) => row.id));
+  }
+  return updatedIds;
+}
+
 async function getConfigSummaries(projectId: string) {
   const configs = await getConfigsForProject(projectId);
   if (configs.length === 0) return [];
@@ -344,14 +376,6 @@ async function updateKeywordMetrics(
   );
 }
 
-async function getKeywordCountForConfig(configId: string) {
-  const rows = await db
-    .select({ value: count() })
-    .from(rankTrackingKeywords)
-    .where(eq(rankTrackingKeywords.configId, configId));
-  return rows[0]?.value ?? 0;
-}
-
 /** Keyword counts keyed by config id. Configs with no keywords are absent. */
 async function getKeywordCountsForConfigs(configIds: string[]) {
   // Chunked so the IN list stays under D1's ~100 bound-parameter cap.
@@ -371,7 +395,7 @@ async function getKeywordCountsForConfigs(configIds: string[]) {
 export const RankTrackingRepository = {
   getConfigsForProject,
   getConfigById,
-  getConfigByProjectDomainLocation,
+  getConfigByProjectDomainMarket,
   createConfig,
   updateConfig,
   getDueConfigsWithOrganization,
@@ -383,15 +407,18 @@ export const RankTrackingRepository = {
   getLatestRunForConfig,
   getActiveRunForConfig,
   insertSnapshots,
+  upsertSnapshots,
+  deleteNotFoundSnapshots,
   getSnapshotsForRun,
   getKeywordsForConfig,
   addKeywordsToConfig,
   removeKeywordsFromConfig,
+  setKeywordsPinned,
   updateKeywordMetrics,
-  getKeywordCountForConfig,
   getKeywordCountsForConfigs,
   getConfigSummaries,
   getLatestSnapshotsForKeywords,
+  getBestPositionsForKeywords,
   getSnapshotsBeforeDate,
   getEarliestSnapshotsForKeywords,
   getKeywordHistory,
