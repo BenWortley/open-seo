@@ -91,7 +91,7 @@ Everyone allowed through Cloudflare Access works in one shared workspace and see
 ## Tearing it down
 
 ```bash
-pnpm alchemy destroy --env-file .env.selfhost --stage selfhost
+pnpm alchemy destroy deploy/alchemy/alchemy.run.ts --env-file .env.selfhost --stage selfhost
 ```
 
 This deletes the Workers, the stage-suffixed D1/KV/R2 resources (including your data), and the Access application.

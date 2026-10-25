@@ -133,7 +133,7 @@ cp .env.preview ../open-seo-pub-<pr>/
 (cd ../open-seo-pub-<pr> && pnpm install --frozen-lockfile && pnpm exec vite build --mode preview)
 rm -rf dist && cp -R ../open-seo-pub-<pr>/dist dist
 git worktree remove --force ../open-seo-pub-<pr>
-pnpm alchemy deploy --env-file .env.preview --stage pub-<pr> --yes
+pnpm alchemy deploy deploy/alchemy/alchemy.run.ts --env-file .env.preview --stage pub-<pr> --yes
 ```
 
 Verify the preview redirects to the Access login before sharing its URL.
