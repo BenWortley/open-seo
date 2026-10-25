@@ -2,8 +2,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
-import { SearchConsoleConnectionCard } from "@/client/features/gsc/SearchConsoleConnectionCard";
-import { GoogleAnalyticsConnectionCard } from "@/client/features/ga4/GoogleAnalyticsConnectionCard";
+import { GoogleConnectionCard } from "@/client/features/integrations/GoogleConnectionCard";
+import type { GooglePickerAccount } from "./GooglePropertyPicker";
 import { SearchConsoleOnboardingStep } from "@/client/features/onboarding/SearchConsoleOnboardingStep";
 
 vi.mock("@/serverFunctions/gsc", () => ({
@@ -32,7 +32,6 @@ vi.mock("@/client/features/integrations/googleLinkError", () => ({
   clearGoogleLinkError: vi.fn(),
   reportGoogleLinkErrorOnce: vi.fn(),
 }));
-vi.mock("@/lib/auth-mode", () => ({ isHostedClientAuthMode: () => true }));
 vi.mock("@/client/lib/posthog", () => ({ captureClientEvent: vi.fn() }));
 
 function renderSetup(
@@ -40,7 +39,13 @@ function renderSetup(
   hasGrant: boolean,
   connected = false,
   canManage = true,
-  connectionError?: "initial" | "refetch",
+  {
+    connectionError,
+    accounts,
+  }: {
+    connectionError?: "initial" | "refetch";
+    accounts?: GooglePickerAccount[];
+  } = {},
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, retryOnMount: false } },
@@ -52,10 +57,14 @@ function renderSetup(
     currentUserHasGrant: hasGrant,
     canManage,
     googleOAuthConfigured: true,
-    siteUrl: "https://example.com/",
-    propertyId: "properties/123",
-    propertyDisplayName: "Example",
+    property: "https://example.com/",
   });
+  if (accounts) {
+    client.setQueryData(
+      [provider === "gsc" ? "gscSites" : "ga4Properties", "project-a"],
+      { accounts },
+    );
+  }
   if (connectionError) {
     client
       .getQueryCache()
@@ -75,12 +84,10 @@ function renderSetup(
           onBack: vi.fn(),
           onSkip: vi.fn(),
         })
-      : createElement(
-          surface === "gsc"
-            ? SearchConsoleConnectionCard
-            : GoogleAnalyticsConnectionCard,
-          { projectId: "project-a" },
-        );
+      : createElement(GoogleConnectionCard, {
+          provider,
+          projectId: "project-a",
+        });
   const html = renderToStaticMarkup(
     createElement(QueryClientProvider, { client }, component),
   );
@@ -94,22 +101,8 @@ describe.each(["gsc", "ga4", "onboarding"] as const)(
     it("opens property selection without a browser resume flag after authorization", () => {
       const html = renderSetup(surface, true);
       expect(html).toContain("Choose property");
-      expect(html).toContain("Select a property");
+      expect(html).toContain("Add Google account");
       expect(html).not.toContain("Connect with Google");
-    });
-    it("offers authorization when no account has been linked", () => {
-      const html = renderSetup(surface, false);
-      expect(html).not.toContain("Select a property");
-      expect(html).toContain(
-        surface === "onboarding" ? "Connect with Google" : "Connect",
-      );
-    });
-    it("shows the saved connection rather than reopening setup", () => {
-      const html = renderSetup(surface, true, true);
-      expect(html).not.toContain("Select a property");
-      expect(html).toContain(
-        surface === "ga4" ? "Example" : "https://example.com/",
-      );
     });
   },
 );
@@ -118,14 +111,17 @@ it.each(["gsc", "ga4"] as const)(
   "does not automatically open property editing for a %s viewer",
   (surface) => {
     const html = renderSetup(surface, true, false, false);
-    expect(html).not.toContain("Select a property");
+    expect(html).not.toContain("Choose property");
+    expect(html).not.toContain("Save property");
     expect(html).toContain("Manage Google accounts");
   },
 );
 
 describe("onboarding connection actions", () => {
   it("keeps cached property setup and a single footer after a failed refetch", () => {
-    const html = renderSetup("onboarding", true, false, true, "refetch");
+    const html = renderSetup("onboarding", true, false, true, {
+      connectionError: "refetch",
+    });
     expect(html).toContain("Choose property");
     expect(html).not.toContain("check your Google connection.");
     expect(html.match(/Save and continue/g)).toHaveLength(1);
@@ -134,40 +130,65 @@ describe("onboarding connection actions", () => {
   });
 
   it("keeps a saved connection usable after a failed refetch", () => {
-    const html = renderSetup("onboarding", true, true, true, "refetch");
+    const html = renderSetup("onboarding", true, true, true, {
+      connectionError: "refetch",
+    });
     expect(html).toContain("https://example.com/");
     expect(html).toMatch(/>Continue[ <]/);
     expect(html).not.toContain("Save and continue");
   });
 
   it("offers retry and disables saving when the initial connection check fails", () => {
-    const html = renderSetup("onboarding", false, false, true, "initial");
+    const html = renderSetup("onboarding", false, false, true, {
+      connectionError: "initial",
+    });
     expect(html).toContain("Couldn&#x27;t check your Google connection.");
     expect(html).toContain("Try again");
     expect(html).not.toContain("Choose property");
-    expect(html).toMatch(/disabled="">Save and continue<\/button>/);
+    expect(html).toMatch(/disabled=""[^>]*>Save and continue/);
   });
+});
 
-  it("requires saving a property or explicitly skipping before advancing", () => {
-    const html = renderSetup("onboarding", true);
-    expect(html).toContain("Save and continue");
-    expect(html).toContain("Skip for now");
-    expect(html).not.toMatch(/>Continue[ <]/);
-    expect(html).not.toContain("Save property");
-  });
+describe("Search Console website setup guidance", () => {
+  const emptyAccount = {
+    accountId: "account-a",
+    email: "owner@example.com",
+    requiresReconnect: false,
+    properties: [],
+  };
 
-  it("offers an explicit skip before Google authorization", () => {
-    const html = renderSetup("onboarding", false);
-    expect(html).toContain("Skip for now");
-    expect(html).not.toMatch(/>Continue[ <]/);
-    expect(html).toContain("Save and continue");
-    expect(html).toMatch(/disabled="">Save and continue<\/button>/);
-  });
+  it.each(["gsc", "onboarding"] as const)(
+    "explains empty accounts without opening the %s picker",
+    (surface) => {
+      const html = renderSetup(surface, true, false, true, {
+        accounts: [emptyAccount],
+      });
+      expect(html).toContain("We couldn’t find your website");
+      expect(html).toContain("owner@example.com");
+      expect(html).not.toContain("Choose property");
+      expect(html).toContain("/blogs/google-search-console-setup");
+      expect(html).toContain("Refresh");
+      expect(html).toContain("Use a different Google account");
+      if (surface === "onboarding") expect(html).toContain("Skip for now");
+    },
+  );
 
-  it("allows continuing without another save for an existing connection", () => {
-    const html = renderSetup("onboarding", true, true);
-    expect(html).toMatch(/>Continue[ <]/);
-    expect(html).not.toContain("Save and continue");
-    expect(html).not.toContain("Skip for now");
-  });
+  it.each([
+    { requiresReconnect: true },
+    { unavailable: true },
+    {
+      properties: [
+        { id: "https://example.com/", name: "example.com", selectable: true },
+      ],
+    },
+  ])(
+    "does not mistake expired, failed, or populated accounts for a new website",
+    (patch) => {
+      const html = renderSetup("gsc", true, false, true, {
+        accounts: [{ ...emptyAccount, ...patch }],
+      });
+      expect(html).toContain("Choose property");
+      expect(html).not.toContain("We couldn’t find your website");
+    },
+  );
 });

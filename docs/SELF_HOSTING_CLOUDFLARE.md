@@ -47,7 +47,7 @@ Already logged in from before without the `access:write` scope? Run `pnpm alchem
 Copy the template and fill in the required values:
 
 ```bash
-cp .env.selfhost.example .env.selfhost
+cp deploy/.env.selfhost.example .env.selfhost
 ```
 
 ## 4) Deploy
@@ -91,7 +91,7 @@ Everyone allowed through Cloudflare Access works in one shared workspace and see
 ## Tearing it down
 
 ```bash
-pnpm alchemy destroy --env-file .env.selfhost --stage selfhost
+pnpm alchemy destroy deploy/alchemy/alchemy.run.ts --env-file .env.selfhost --stage selfhost
 ```
 
 This deletes the Workers, the stage-suffixed D1/KV/R2 resources (including your data), and the Access application.
