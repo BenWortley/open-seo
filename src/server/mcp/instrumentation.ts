@@ -1,7 +1,7 @@
 import { waitUntil } from "cloudflare:workers";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import type { z } from "zod";
-import { AppError, asAppError } from "@/server/lib/errors";
+import { AppError, asAppError, describeError } from "@/server/lib/errors";
 import { recordExternalMcpToolCall } from "@/server/features/activation/mcpActivation";
 import { captureServerError, captureServerEvent } from "@/server/lib/posthog";
 import { shouldCaptureAppErrorCode } from "@/shared/error-codes";
@@ -166,15 +166,16 @@ export function instrumentMcpToolHandler<TArgs>(
                   : undefined,
             },
       );
-      // Dashboard activation milestone: a successful call from an external
-      // MCP client (OAuth clientId; SAM and the self-hosted transport are
-      // first-party with clientId null). Awaited so the write stays inside
+      // Activation milestone for the dashboard and the onboarding emails: a
+      // successful call from an external MCP client (OAuth clientId or API
+      // key; SAM and the self-hosted transport are first-party with clientId
+      // null). Awaited so the write stays inside
       // the request's DB scope; a per-isolate memo keeps this off the hot
       // path after the first call.
       if (succeeded) {
         const auth = context.auth;
         if (auth.clientId) {
-          await recordExternalMcpToolCall(auth.organizationId);
+          await recordExternalMcpToolCall(auth);
         }
       }
       return result;
@@ -186,7 +187,10 @@ export function instrumentMcpToolHandler<TArgs>(
         durationMs: Math.round(performance.now() - startedAt),
       });
       if (shouldCaptureAppErrorCode(appError?.code)) {
-        console.error(`mcp.tool error (${toolName}):`, error);
+        console.error(
+          `mcp.tool error (${toolName}): ${describeError(error)}`,
+          error,
+        );
         waitUntil(
           captureServerError(
             error,

@@ -16,9 +16,17 @@ Use the upstream Cloudflare Access protection and restrict allowed users. Keep r
 
 Current deployment status and project migration evidence belong in the separate MoreClicksInfra workspace, not this public repository.
 
+## Where deploys run
+
+Deploys run from the maintainer's VM, not from CI. The VM holds an Alchemy Cloudflare login (the default profile) and the `.env.selfhost` file in its main checkout. Copy that file into the worktree you deploy from right before you plan, and never commit it. The deploy sets the Worker's secrets from this file, so a stale copy removes any secret added since. If the file is lost, rebuild it from the selfhost stage's Alchemy state with `pnpm alchemy state get --stack open-seo --stage selfhost --fqn open-seo`.
+
+The env file sets no `AUTH_MODE`, so the stack keeps its `cloudflare_access` default. Upstream's example file now sets `AUTH_MODE=password` for new self-hosts. Don't copy that line into the More Clicks file.
+
+Before a deploy, check that no audit or rank check is running, then run `pnpm alchemy plan deploy/alchemy/alchemy.run.ts --env-file .env.selfhost --stage selfhost`. The plan should delete nothing, leave `SelfHostAccess` and `SelfHostAllowUsers` unchanged, and change no secret you didn't mean to change. Then run `pnpm deploy:selfhost --yes`.
+
 ## Workers plan
 
-The More Clicks `selfhost` stage requires Workers Paid. Its app Worker explicitly sets 30 seconds CPU and 10,000 subrequests per invocation in `deploy/alchemy/alchemy.run.ts`; other preview stages retain upstream defaults. Preserve this setting when merging upstream.
+The More Clicks `selfhost` stage requires Workers Paid. Its app Worker explicitly sets 30 seconds CPU and 10,000 subrequests per invocation in `deploy/alchemy/moreclicks-selfhost.ts`; other preview stages retain upstream defaults. Preserve this setting when merging upstream.
 
 ## Custom hostname
 
